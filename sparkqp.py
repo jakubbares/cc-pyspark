@@ -68,8 +68,8 @@ class CCSparkJob(object):
         arg_parser = argparse.ArgumentParser(prog=self.name, description=description,
                                              conflict_handler='resolve')
 
-        arg_parser.add_argument("input", help=self.input_descr)
-        arg_parser.add_argument("output", help=self.output_descr)
+        #arg_parser.add_argument("input_paths_file_path", help=self.input_descr)
+        #arg_parser.add_argument("output_table", help=self.output_descr)
 
         arg_parser.add_argument("--input_base_url",
                                 default="https://data.commoncrawl.org/",
@@ -171,9 +171,11 @@ class CCSparkJob(object):
                         .getLogger(self.name)
         return logging.getLogger(self.name)
 
-    def run(self):
+    def run(self, input_paths_file_path, output_table):
         """Run the job"""
         self.args = self.parse_arguments()
+        self.args.input_paths_file_path = input_paths_file_path
+        self.args.output_table = output_table
 
         builder = SparkSession.builder.appName(self.name)
 
@@ -210,7 +212,7 @@ class CCSparkJob(object):
         return a + b
 
     def run_job(self, session):
-        input_data = session.sparkContext.textFile(self.args.input,
+        input_data = session.sparkContext.textFile(self.args.input_paths_file_path,
                                                    minPartitions=self.args.num_input_partitions)
 
         output = input_data.mapPartitionsWithIndex(self.process_warcs) \
@@ -448,7 +450,7 @@ class CCIndexSparkJob(CCSparkJob):
         return sqldf
 
     def load_dataframe(self, session, partitions=-1):
-        self.load_table(session, self.args.input, self.args.table)
+        self.load_table(session, self.args.input_paths_file_path, self.args.table)
         sqldf = self.execute_query(session, self.args.query)
         sqldf.persist()
 
@@ -471,7 +473,7 @@ class CCIndexSparkJob(CCSparkJob):
             .format(self.args.output_format) \
             .option("compression", self.args.output_compression) \
             .options(**self.get_output_options()) \
-            .saveAsTable(self.args.output)
+            .saveAsTable(self.args.output_table)
 
         self.log_accumulators(session)
 
@@ -536,7 +538,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             data_format = self.args.input_table_format
             reader = session.read.format(data_format)
             reader = reader.options(**self.get_input_table_options())
-            sqldf = reader.load(self.args.input)
+            sqldf = reader.load(self.args.input_paths_file_path)
 
         if partitions > 0:
             self.get_logger(session).info(
@@ -597,6 +599,6 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .format(self.args.output_format) \
             .option("compression", self.args.output_compression) \
             .options(**self.get_output_options()) \
-            .saveAsTable(self.args.output)
+            .saveAsTable(self.args.output_table)
 
         self.log_accumulators(session)
