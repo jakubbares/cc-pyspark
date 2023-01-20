@@ -21,12 +21,12 @@ from pyspark.sql.types import StructType, StructField, StringType, LongType
 LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 
 
-class QPSparkJob(object):
+class CCSparkJob(object):
     """
     A simple Spark job definition to process Common Crawl data
     """
 
-    name = 'QPSparkJob'
+    name = 'CCSparkJob'
 
     output_schema = StructType([
         StructField("key", StringType(), True),
@@ -408,7 +408,7 @@ class QPSparkJob(object):
         return False
 
 
-class CCIndexSparkJob(QPSparkJob):
+class CCIndexSparkJob(CCSparkJob):
     """
     Process the Common Crawl columnar URL index
     """
