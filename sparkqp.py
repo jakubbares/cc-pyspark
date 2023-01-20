@@ -408,7 +408,7 @@ class QPSparkJob(object):
         return False
 
 
-class CCIndexSparkJob(CCSparkJob):
+class CCIndexSparkJob(QPSparkJob):
     """
     Process the Common Crawl columnar URL index
     """
