@@ -58,7 +58,7 @@ class CCSparkJob(object):
     data_url_pattern = re.compile('^(s3|https?|file|hdfs):(?://([^/]*))?/(.*)')
 
 
-    def parse_arguments(self):
+    def set_settings(self):
         """Returns the parsed arguments from the command line"""
 
         description = self.name
@@ -105,10 +105,6 @@ class CCSparkJob(object):
 
         arg_parser.add_argument("--log_level", default=self.log_level,
                                 help="Logging level")
-        arg_parser.add_argument("--spark-profiler", action='store_true',
-                                help="Enable PySpark profiler and log"
-                                " profiling metrics if job has finished,"
-                                " cf. spark.python.profile")
 
         self.add_arguments(arg_parser)
         args = arg_parser.parse_args()
