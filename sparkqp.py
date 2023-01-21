@@ -183,7 +183,7 @@ class CCSparkJob(object):
             .format(self.args.output_format) \
             .option("compression", self.args.output_compression) \
             .options(**self.get_output_options()) \
-            .saveAsTable(self.args.output)
+            .saveAsTable(self.args.output_table)
 
         self.log_accumulators(session)
 
