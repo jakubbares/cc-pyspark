@@ -131,7 +131,7 @@ class CCSparkJob(object):
 
     def run(self, input_paths_file_path, output_table):
         """Run the job"""
-        self.args = self.parse_arguments()
+        self.args = self.set_settings()
         self.args.input_paths_file_path = input_paths_file_path
         self.args.output_table = output_table
 
