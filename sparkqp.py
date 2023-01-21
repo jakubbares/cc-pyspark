@@ -10,7 +10,7 @@ from tempfile import SpooledTemporaryFile, TemporaryFile
 import boto3
 import botocore
 import requests
-
+from metadict import MetaDict
 from warcio.archiveiterator import ArchiveIterator
 from warcio.recordloader import ArchiveLoadFailed
 
@@ -61,57 +61,19 @@ class CCSparkJob(object):
     def set_settings(self):
         """Returns the parsed arguments from the command line"""
 
-        description = self.name
-        if self.__doc__ is not None:
-            description += " - "
-            description += self.__doc__
-        arg_parser = argparse.ArgumentParser(prog=self.name, description=description,
-                                             conflict_handler='resolve')
+        dict_config = {
+            'input_base_url': 'https://data.commoncrawl.org/',
+            'num_input_partitions': self.num_input_partitions,
+            'num_output_partitions': self.num_input_partitions,
+            'output_format': "parquet",
+            'output_compression': "gzip",
+            'output_option': "[]",
+            'local_temp_dir': None,
+            'log_level': self.log_level,
 
-        #arg_parser.add_argument("input_paths_file_path", help=self.input_descr)
-        #arg_parser.add_argument("output_table", help=self.output_descr)
-
-        arg_parser.add_argument("--input_base_url",
-                                default="https://data.commoncrawl.org/",
-                                help="Base URL (prefix) used if paths to WARC/WAT/WET "
-                                "files are relative paths. Used to select the "
-                                "access method: s3://commoncrawl/ (authenticated "
-                                "S3) or https://data.commoncrawl.org/ (HTTP)")
-        arg_parser.add_argument("--num_input_partitions", type=int,
-                                default=self.num_input_partitions,
-                                help="Number of input splits/partitions, "
-                                "number of parallel tasks to process WARC "
-                                "files/records")
-        arg_parser.add_argument("--num_output_partitions", type=int,
-                                default=self.num_output_partitions,
-                                help="Number of output partitions")
-        arg_parser.add_argument("--output_format", default="parquet",
-                                help="Output format: parquet (default),"
-                                " orc, json, csv")
-        arg_parser.add_argument("--output_compression", default="gzip",
-                                help="Output compression codec: None,"
-                                " gzip/zlib (default), snappy, lzo, etc.")
-        arg_parser.add_argument("--output_option", action='append', default=[],
-                                help="Additional output option pair"
-                                " to set (format-specific) output options, e.g.,"
-                                " `header=true` to add a header line to CSV files."
-                                " Option name and value are split at `=` and"
-                                " multiple options can be set by passing"
-                                " `--output_option <name>=<value>` multiple times")
-
-        arg_parser.add_argument("--local_temp_dir", default=None,
-                                help="Local temporary directory, used to"
-                                " buffer content from S3")
-
-        arg_parser.add_argument("--log_level", default=self.log_level,
-                                help="Logging level")
-
-        self.add_arguments(arg_parser)
-        args = arg_parser.parse_args()
+        }
+        args = MetaDict(dict_config)
         self.init_logging(args.log_level)
-        if not self.validate_arguments(args):
-            raise Exception("Arguments not valid")
-
         return args
 
     def add_arguments(self, parser):
