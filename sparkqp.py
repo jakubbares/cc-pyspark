@@ -138,8 +138,10 @@ class CCSparkJob(object):
 
         builder = SparkSession.builder.appName(self.name)
 
+        """
         if self.args.spark_profiler:
             builder.config("spark.python.profile", "true")
+        """
 
         session = builder.getOrCreate()
 
@@ -148,9 +150,10 @@ class CCSparkJob(object):
 
         self.run_job(session)
 
+        """
         if self.args.spark_profiler:
             session.sparkContext.show_profiles()
-
+        """
         session.stop()
 
     def log_accumulator(self, session, acc, descr):
