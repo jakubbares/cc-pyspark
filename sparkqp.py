@@ -70,6 +70,7 @@ class CCSparkJob(object):
             'output_option': "[]",
             'local_temp_dir': None,
             'log_level': self.log_level,
+            'spark_profiler': False,
 
         }
         args = MetaDict(dict_config)
