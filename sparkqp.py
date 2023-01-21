@@ -70,8 +70,6 @@ class CCSparkJob(object):
             'output_option': [],
             'local_temp_dir': None,
             'log_level': self.log_level,
-            'spark_profiler': True,
-
         }
         args = MetaDict(dict_config)
         self.init_logging(args.log_level)
@@ -138,18 +136,12 @@ class CCSparkJob(object):
 
         builder = SparkSession.builder.appName(self.name)
 
-        if self.args.spark_profiler:
-            builder.config("spark.python.profile", "true")
-
         session = builder.getOrCreate()
 
         self.init_logging(self.args.log_level, session)
         self.init_accumulators(session)
 
         self.run_job(session)
-
-        if self.args.spark_profiler:
-            session.sparkContext.show_profiles()
 
         session.stop()
 
