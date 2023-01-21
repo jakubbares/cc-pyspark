@@ -67,10 +67,10 @@ class CCSparkJob(object):
             'num_output_partitions': self.num_input_partitions,
             'output_format': "parquet",
             'output_compression': "gzip",
-            'output_option': "[]",
+            'output_option': [],
             'local_temp_dir': None,
             'log_level': self.log_level,
-            'spark_profiler': None,
+            'spark_profiler': True,
 
         }
         args = MetaDict(dict_config)
