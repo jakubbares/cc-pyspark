@@ -213,47 +213,7 @@ class CCSparkJob(object):
 
         stream = None
 
-        if scheme == 's3':
-            bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return
-            if not path:
-                self.get_logger().error("Empty S3 path: " + uri)
-                return
-            elif path[0] == '/':
-                # must strip leading / in S3 path
-                path = path[1:]
-            if offset > -1 and length > 0:
-                rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
-                # Note: avoid logging too many small fetches
-                #self.get_logger().debug('Fetching {} ({})'.format(uri, rangereq))
-                try:
-                    response = self.get_s3_client().get_object(Bucket=bucketname,
-                                                               Key=path,
-                                                               Range=rangereq)
-                    stream = BytesIO(response["Body"].read())
-                except botocore.client.ClientError as exception:
-                    self.get_logger().error(
-                        'Failed to download: s3://{}/{} (offset: {}, length: {}) - {}'
-                        .format(bucketname, path, offset, length, exception))
-                    self.warc_input_failed.add(1)
-                    return
-            else:
-                self.get_logger().info('Reading from S3 {}'.format(uri))
-                # download entire file using a temporary file for buffering
-                warctemp = TemporaryFile(mode='w+b', dir=self.args.local_temp_dir)
-                try:
-                    self.get_s3_client().download_fileobj(bucketname, path, warctemp)
-                    warctemp.seek(0)
-                    stream = warctemp
-                except botocore.client.ClientError as exception:
-                    self.get_logger().error(
-                        'Failed to download {}: {}'.format(uri, exception))
-                    self.warc_input_failed.add(1)
-                    warctemp.close()
-
-        elif scheme == 'http' or scheme == 'https':
+        if scheme == 'http' or scheme == 'https':
             headers = None
             if offset > -1 and length > 0:
                 headers = {
@@ -261,8 +221,7 @@ class CCSparkJob(object):
                 }
                 # Note: avoid logging many small fetches
                 #self.get_logger().debug('Fetching {} ({})'.format(uri, headers))
-            else:
-                self.get_logger().info('Fetching {}'.format(uri))
+
             response = requests.get(uri, headers=headers)
 
             if response.ok:
@@ -276,32 +235,6 @@ class CCSparkJob(object):
             else:
                 self.get_logger().error(
                     'Failed to download {}: {}'.format(uri, response.status_code))
-
-        elif scheme == 'hdfs':
-            try:
-                import pydoop.hdfs as hdfs
-                self.get_logger().error("Reading from HDFS {}".format(uri))
-                stream = hdfs.open(uri)
-            except RuntimeError as exception:
-                self.get_logger().error(
-                    'Failed to open {}: {}'.format(uri, exception))
-                self.warc_input_failed.add(1)
-
-        else:
-            self.get_logger().info('Reading local file {}'.format(uri))
-            if scheme == 'file':
-                # must be an absolute path
-                uri = os.path.join('/', path)
-            else:
-                base_dir = os.path.abspath(os.path.dirname(__file__))
-                uri = os.path.join(base_dir, uri)
-            try:
-                stream = open(uri, 'rb')
-            except IOError as exception:
-                self.get_logger().error(
-                    'Failed to open {}: {}'.format(uri, exception))
-                self.warc_input_failed.add(1)
-
         return stream
 
     def process_warcs(self, _id, iterator):
