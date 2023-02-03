@@ -107,29 +107,6 @@ class CCSparkJob(object):
         if session:
             session.sparkContext.setLogLevel(level)
 
-
-    def init_accumulators(self, session):
-        """Register and initialize counters (aka. accumulators).
-           Derived classes may use this method to add their own
-           accumulators but must call super().init_accumulators(session)
-           to also initialize counters from base classes."""
-        sc = session.sparkContext
-        self.records_processed = sc.accumulator(0)
-        self.warc_input_processed = sc.accumulator(0)
-        self.warc_input_failed = sc.accumulator(0)
-
-    def get_logger(self, session=None):
-        """Get logger from SparkSession or (if None) from logging module"""
-        if not session:
-            try:
-                session = SparkSession.getActiveSession()
-            except AttributeError:
-                pass # method available since Spark 3.0.0
-        if session:
-            return session._jvm.org.apache.log4j.LogManager \
-                        .getLogger(self.name)
-        return logging.getLogger(self.name)
-
     def run(self, input_paths_file_path, output_table):
         """Run the job"""
         self.args = self.set_settings()
@@ -142,12 +119,7 @@ class CCSparkJob(object):
         if self.args.spark_profiler:
             builder.config("spark.python.profile", "true")
         """
-
         session = builder.getOrCreate()
-
-        self.init_logging(self.args.log_level, session)
-        self.init_accumulators(session)
-
         self.run_job(session)
 
         """
@@ -155,19 +127,6 @@ class CCSparkJob(object):
             session.sparkContext.show_profiles()
         """
         session.stop()
-
-    def log_accumulator(self, session, acc, descr):
-        """Log single counter/accumulator"""
-        self.get_logger(session).info(descr.format(acc.value))
-
-    def log_accumulators(self, session):
-        """Log counters/accumulators, see `init_accumulators`."""
-        self.log_accumulator(session, self.warc_input_processed,
-                             'WARC/WAT/WET input files processed = {}')
-        self.log_accumulator(session, self.warc_input_failed,
-                             'WARC/WAT/WET input files failed = {}')
-        self.log_accumulator(session, self.records_processed,
-                             'WARC/WAT/WET records processed = {}')
 
     @staticmethod
     def reduce_by_key_func(a, b):
@@ -187,13 +146,6 @@ class CCSparkJob(object):
             .option("compression", self.args.output_compression) \
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output_table)
-
-        self.log_accumulators(session)
-
-    def get_s3_client(self):
-        if not self.s3client:
-            self.s3client = boto3.client('s3', use_ssl=False)
-        return self.s3client
 
     def fetch_warc(self, uri, base_uri=None, offset=-1, length=-1):
         """Fetch WARC/WAT/WET files (or a record if offset and length are given)"""
@@ -232,9 +184,6 @@ class CCSparkJob(object):
                 warctemp.write(response.content)
                 warctemp.seek(0)
                 stream = warctemp
-            else:
-                self.get_logger().error(
-                    'Failed to download {}: {}'.format(uri, response.status_code))
         return stream
 
     def process_warcs(self, _id, iterator):
@@ -252,10 +201,6 @@ class CCSparkJob(object):
                                                    no_record_parse=no_parse, arc2warc=True)
                 for res in self.iterate_records(uri, archive_iterator):
                     yield res
-            except ArchiveLoadFailed as exception:
-                self.warc_input_failed.add(1)
-                self.get_logger().error(
-                    'Invalid WARC: {} - {}'.format(uri, exception))
             finally:
                 stream.close()
 
@@ -328,19 +273,15 @@ class CCIndexSparkJob(CCSparkJob):
     def load_table(self, session, table_path, table_name):
         parquet_reader = session.read.format('parquet')
         if self.args.table_schema is not None:
-            self.get_logger(session).info(
-                "Reading table schema from {}".format(self.args.table_schema))
             with open(self.args.table_schema, 'r') as s:
                 schema = StructType.fromJson(json.loads(s.read()))
             parquet_reader = parquet_reader.schema(schema)
         df = parquet_reader.load(table_path)
         df.createOrReplaceTempView(table_name)
-        self.get_logger(session).info(
-            "Schema of table {}:\n{}".format(table_name, df.schema))
+
 
     def execute_query(self, session, query):
         sqldf = session.sql(query)
-        self.get_logger(session).info("Executing query: {}".format(query))
         sqldf.explain()
         return sqldf
 
@@ -348,14 +289,8 @@ class CCIndexSparkJob(CCSparkJob):
         self.load_table(session, self.args.input_paths_file_path, self.args.table)
         sqldf = self.execute_query(session, self.args.query)
         sqldf.persist()
-
         num_rows = sqldf.count()
-        self.get_logger(session).info(
-            "Number of records/rows matched by query: {}".format(num_rows))
-
         if partitions > 0:
-            self.get_logger(session).info(
-                "Repartitioning data to {} partitions".format(partitions))
             sqldf = sqldf.repartition(partitions)
             sqldf.persist()
 
@@ -370,7 +305,6 @@ class CCIndexSparkJob(CCSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output_table)
 
-        self.log_accumulators(session)
 
 
 class CCIndexWarcSparkJob(CCIndexSparkJob):
@@ -436,8 +370,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             sqldf = reader.load(self.args.input_paths_file_path)
 
         if partitions > 0:
-            self.get_logger(session).info(
-                "Repartitioning data to {} partitions".format(partitions))
+
             sqldf = sqldf.repartition(partitions)
 
         sqldf.persist()
@@ -463,7 +396,6 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             warc_path = row['warc_filename']
             offset = int(row['warc_record_offset'])
             length = int(row['warc_record_length'])
-            self.get_logger().debug("Fetching WARC record for {}".format(url))
             record_stream = self.fetch_warc(warc_path, self.args.input_base_url, offset, length)
             try:
                 for record in ArchiveIterator(record_stream,
@@ -473,9 +405,6 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
                     self.records_processed.add(1)
             except ArchiveLoadFailed as exception:
                 self.warc_input_failed.add(1)
-                self.get_logger().error(
-                    'Invalid WARC record: {} ({}, offset: {}, length: {}) - {}'
-                    .format(url, warc_path, offset, length, exception))
 
     def run_job(self, session):
         sqldf = self.load_dataframe(session, self.args.num_input_partitions)
@@ -495,5 +424,3 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .option("compression", self.args.output_compression) \
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output_table)
-
-        self.log_accumulators(session)
